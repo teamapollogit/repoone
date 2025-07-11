@@ -1,0 +1,16 @@
+{
+  "name": "repoone",
+  "version": "1.0.0",
+  "description": "The very first repo",
+  "main": "index.js",
+  "scripts": {
+    "test": "./test.sh",
+    "lint": "echo 'No linting configured yet'"
+  },
+  "keywords": [],
+  "author": "teamapollogit",
+  "license": "MIT",
+  "devDependencies": {
+    "lodash": "^4.17.20"
+  }
+}

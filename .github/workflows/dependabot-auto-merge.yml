@@ -1,0 +1,130 @@
+name: Dependabot Auto-Merge
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  pull_request_review:
+    types: [submitted]
+  check_suite:
+    types: [completed]
+  status: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+  statuses: read
+
+jobs:
+  dependabot-auto-merge:
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Get Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2.2.0
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Check if PR is ready for auto-merge
+        id: check-ready
+        run: |
+          # Get PR details
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          
+          # Check if PR is mergeable
+          MERGEABLE=$(gh pr view $PR_NUMBER --json mergeable --jq '.mergeable')
+          echo "mergeable=$MERGEABLE" >> $GITHUB_OUTPUT
+          
+          # Check status checks
+          STATUS_CHECKS=$(gh pr checks $PR_NUMBER --json state,conclusion)
+          FAILED_CHECKS=$(echo "$STATUS_CHECKS" | jq -r '.[] | select(.state == "COMPLETED" and .conclusion != "SUCCESS" and .conclusion != "SKIPPED" and .conclusion != "NEUTRAL") | .conclusion' | wc -l)
+          PENDING_CHECKS=$(echo "$STATUS_CHECKS" | jq -r '.[] | select(.state != "COMPLETED") | .state' | wc -l)
+          
+          echo "failed-checks=$FAILED_CHECKS" >> $GITHUB_OUTPUT
+          echo "pending-checks=$PENDING_CHECKS" >> $GITHUB_OUTPUT
+          
+          if [ "$FAILED_CHECKS" -eq 0 ] && [ "$PENDING_CHECKS" -eq 0 ] && [ "$MERGEABLE" = "MERGEABLE" ]; then
+            echo "ready=true" >> $GITHUB_OUTPUT
+          else
+            echo "ready=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Auto-merge patch and minor updates
+        if: |
+          steps.check-ready.outputs.ready == 'true' && 
+          (steps.metadata.outputs.update-type == 'version-update:semver-patch' || 
+           steps.metadata.outputs.update-type == 'version-update:semver-minor')
+        run: |
+          echo "Auto-merging ${{ steps.metadata.outputs.update-type }} update for ${{ steps.metadata.outputs.dependency-names }}"
+          gh pr merge ${{ github.event.pull_request.number }} --auto --merge
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Auto-merge security updates
+        if: |
+          steps.check-ready.outputs.ready == 'true' && 
+          contains(steps.metadata.outputs.dependency-names, 'security')
+        run: |
+          echo "Auto-merging security update for ${{ steps.metadata.outputs.dependency-names }}"
+          gh pr merge ${{ github.event.pull_request.number }} --auto --merge
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Auto-merge GitHub Actions updates
+        if: |
+          steps.check-ready.outputs.ready == 'true' && 
+          steps.metadata.outputs.package-ecosystem == 'github_actions'
+        run: |
+          echo "Auto-merging GitHub Actions update for ${{ steps.metadata.outputs.dependency-names }}"
+          gh pr merge ${{ github.event.pull_request.number }} --auto --merge
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Comment on major updates
+        if: steps.metadata.outputs.update-type == 'version-update:semver-major'
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} --body "⚠️ **Major Version Update Detected**
+          
+          This PR contains a major version update for **${{ steps.metadata.outputs.dependency-names }}**.
+          
+          Major updates may contain breaking changes. Please:
+          1. Review the changelog/release notes
+          2. Test thoroughly before merging
+          3. Consider the impact on your application
+          
+          This PR will **not** be auto-merged and requires manual review."
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add auto-merge label
+        if: |
+          steps.check-ready.outputs.ready == 'true' && 
+          (steps.metadata.outputs.update-type == 'version-update:semver-patch' || 
+           steps.metadata.outputs.update-type == 'version-update:semver-minor' ||
+           contains(steps.metadata.outputs.dependency-names, 'security') ||
+           steps.metadata.outputs.package-ecosystem == 'github_actions')
+        run: |
+          gh pr edit ${{ github.event.pull_request.number }} --add-label "dependabot-auto-merge"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log merge decision
+        run: |
+          echo "## Dependabot Auto-Merge Decision"
+          echo "- **Dependency**: ${{ steps.metadata.outputs.dependency-names }}"
+          echo "- **Update Type**: ${{ steps.metadata.outputs.update-type }}"
+          echo "- **Package Ecosystem**: ${{ steps.metadata.outputs.package-ecosystem }}"
+          echo "- **PR Mergeable**: ${{ steps.check-ready.outputs.mergeable }}"
+          echo "- **Failed Checks**: ${{ steps.check-ready.outputs.failed-checks }}"
+          echo "- **Pending Checks**: ${{ steps.check-ready.outputs.pending-checks }}"
+          echo "- **Ready for Auto-merge**: ${{ steps.check-ready.outputs.ready }}"
