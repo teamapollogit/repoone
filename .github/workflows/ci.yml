@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    # Uncomment and customize matrix strategy for your project type
+    # strategy:
+    #   matrix:
+    #     node-version: [18, 20]
+    #     python-version: [3.8, 3.9, 3.10, 3.11]
+    #     ruby-version: [2.7, 3.0, 3.1]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Node.js setup (enabled for this example project)
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run npm tests
+        run: npm test
+
+      # Python setup (uncomment if you have a Python project)
+      # - name: Setup Python
+      #   uses: actions/setup-python@v5
+      #   with:
+      #     python-version: '3.11'  # or use matrix.python-version with strategy
+      
+      # - name: Install dependencies
+      #   run: |
+      #     python -m pip install --upgrade pip
+      #     pip install -r requirements.txt
+      
+      # - name: Run tests
+      #   run: python -m pytest
+
+      # Ruby setup (uncomment if you have a Ruby project)
+      # - name: Setup Ruby
+      #   uses: ruby/setup-ruby@v1
+      #   with:
+      #     ruby-version: '3.1'  # or use matrix.ruby-version with strategy
+      #     bundler-cache: true
+      
+      # - name: Run tests
+      #   run: bundle exec rspec
+
+      # Additional custom tests can be added here
+
+  lint:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Node.js linting (enabled for this example project)
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run lint
+        run: npm run lint
+
+      # Example for Python:
+      # - name: Setup Python
+      #   uses: actions/setup-python@v5
+      #   with:
+      #     python-version: '3.11'
+      
+      # - name: Install dependencies
+      #   run: |
+      #     python -m pip install --upgrade pip
+      #     pip install flake8 black isort
+      
+      # - name: Run linting
+      #   run: |
+      #     flake8 .
+      #     black --check .
+      #     isort --check-only .
+
+      # Additional linting tools can be added here
